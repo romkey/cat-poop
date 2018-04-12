@@ -11,3 +11,5 @@
 // MQ2 Sensor
 // ignore the first MQ2_SAMPLE_DELAY ms of samples
 #define MQ2_SAMPLE_DELAY 5000
+
+#define PIR_PIN           13
