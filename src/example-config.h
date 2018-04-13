@@ -10,6 +10,10 @@
 
 // MQ2 Sensor
 // ignore the first MQ2_SAMPLE_DELAY ms of samples
-#define MQ2_SAMPLE_DELAY 5000
+#define MQ_SAMPLE_DELAY 5000
+
+// AIO allows 60 data points per minute, we upload 4 at a time
+// so we need a delay of 15 seconds
+#define AIO_SAMPLE_DELAY 15*1000
 
 #define PIR_PIN           13

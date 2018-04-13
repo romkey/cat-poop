@@ -5,6 +5,8 @@
 
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
+// #include <ESP8266HTTPUpdateServer.h>
+#include <ArduinoOTA.h>
 #include <ESP.h>
 
 #include <BootstrapWebSite.h>
@@ -15,8 +17,10 @@
 WiFiClient client;
 
 ESP8266WebServer server(80);
+//ESP8266HTTPUpdateServer httpUpdater;
 BootstrapWebSite ws("en");
 
+#ifdef AIO_KEY
 Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO_KEY);
 Adafruit_MQTT_Publish presence(&mqtt, AIO_USERNAME "/feeds/presence");
 Adafruit_MQTT_Publish mq2(&mqtt, AIO_USERNAME "/feeds/mq2");
@@ -24,9 +28,10 @@ Adafruit_MQTT_Publish mq8(&mqtt, AIO_USERNAME "/feeds/mq8");
 Adafruit_MQTT_Publish mq4(&mqtt, AIO_USERNAME "/feeds/mq4");
 Adafruit_MQTT_Publish pir_feed(&mqtt, AIO_USERNAME "/feeds/pir");
 
-Adafruit_ADS1015 adc;
-
 void mqtt_connect(void);
+#endif
+
+Adafruit_ADS1015 adc;
 
 unsigned long start_time;
 
@@ -42,7 +47,7 @@ void setup() {
   Serial.begin(115200);
   Serial.println("cat poop monitor");
 
-  Serial.println(); Serial.println();
+  Serial.println();
   delay(10);
   Serial.print("Connecting to ");
   Serial.println(WLAN_SSID);
@@ -65,9 +70,12 @@ void setup() {
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
 
-  Serial.println("ADC");
+#ifdef AIO_KEY
+  Serial.println("MQTT");
   mqtt_connect();
+#endif
 
+  Serial.println("ADC");
   adc.begin();
   adc.setGain(GAIN_ONE);
 
@@ -87,17 +95,23 @@ void setup() {
 
   server.onNotFound(handleNotFound);
 
+  //  httpUpdater.setup(&server);
   server.begin();
+
+  ArduinoOTA.begin();
 }
 
 int16_t adc0, adc1, adc2, adc3, pir;
+unsigned long next_sample_time = 0;
 
 void loop() {
+#ifdef AIO_KEY
   if(! mqtt.ping(3)) {
     // reconnect to adafruit io
     if(! mqtt.connected())
       mqtt_connect();
   }
+#endif
 
   pir = digitalRead(PIR_PIN);
   Serial.printf("PIR is %d\n", pir);
@@ -116,25 +130,32 @@ void loop() {
 
   //  Serial.printf("SAMPLE DELAY %d, current time %ld\n", MQ2_SAMPLE_DELAY,  millis() - start_time);
 
-  if((millis() - start_time) > MQ2_SAMPLE_DELAY) {
-    if(!mq2.publish(adc1))
-      Serial.println("publish 1 failed! :(");
+#ifdef AIO_KEY
+  if(((millis() - start_time) > MQ_FIRST_SAMPLE_DELAY) && (millis() > next_sample_time)) {
+    if(adc1 != -1)
+      if(!mq2.publish(adc1))
+	Serial.println("publish 1 failed! :(");
 
-    if(!mq8.publish(adc2))
-      Serial.println("publish 2 failed! :(");
+    if(adc2 != -1)
+      if(!mq8.publish(adc2))
+	Serial.println("publish 2 failed! :(");
 
-    if(!mq4.publish(adc3))
-      Serial.println("publish 3 failed! :(");
+    if(adc3 != -1)
+      if(!mq4.publish(adc3))
+	Serial.println("publish 3 failed! :(");
 
     if(!pir_feed.publish(pir))
       Serial.println("publish pir failed! :(");
+
+    next_sample_time = millis() + AIO_SAMPLE_DELAY;
   }
+#endif
 
   server.handleClient();
-
-  delay(10000);
+  ArduinoOTA.handle();
 }
 
+#ifdef AIO_KEY
 void mqtt_connect(void) {
   int8_t ret;
 
@@ -160,11 +181,12 @@ void mqtt_connect(void) {
 
   Serial.println("Adafruit IO Connected!");
 }
+#endif
 
 void handleIndex() {
   BootstrapWebPage page(&ws);
 
-  page.addHeading("Cat Poop Sensor!");
+  page.addHeading("Cat Poop Sensor XX!");
   page.addList(String("Presence ") + pir,
 	       String("Methane/Butane/LPG/Smoke ") + adc1,
 	       String("Methane/CNG ") + adc2,
