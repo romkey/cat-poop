@@ -2,6 +2,11 @@
 #define WLAN_SSID       "YOUR WIFI NETWORK"
 #define WLAN_PASS       "YOUR WIFI PASSWORD"
  
+// IFTTT
+// comment out the IFTTT_KEY #define if you don't want to use IFTTT
+#define IFTTT_KEY        "YOUR IFTTT KEY"
+#define IFTTT_EVENT_NAME "cat-poop_update"
+
 // Adafruit IO
 #define AIO_SERVER      "io.adafruit.com"
 #define AIO_SERVERPORT  1883

@@ -16,7 +16,16 @@
 
 #include "config.h"
 
+#ifdef IFTTT_KEY
+#include <IFTTTWebhook.h>
+#endif
+
+
 WiFiClient client;
+
+#ifdef IFTTT_KEY
+IFTTTWebhook ifttt(IFTTT_KEY, IFTTT_EVENT_NAME);
+#endif
 
 ESP8266WebServer server(80);
 BootstrapWebSite ws("en");
@@ -89,7 +98,9 @@ void setup() {
     Serial.println("MDNS responder started");
   }
 
-  //  ws.addBranding(branding_image_base64, "image/jpeg");
+#ifdef IFTTT_KEY
+  ifttt.trigger("boot");
+#endif
 
   ws.addPageToNav("😸💩", "/");
   ws.addPageToNav("Info", "/info");
