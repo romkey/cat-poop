@@ -16,4 +16,4 @@
 // so we need a delay of 15 seconds
 #define AIO_SAMPLE_DELAY 15*1000
 
-#define PIR_PIN           13
+#define PIR_PIN           D7

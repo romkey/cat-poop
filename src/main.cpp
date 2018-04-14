@@ -3,6 +3,8 @@
 #include <Adafruit_MQTT_Client.h>
 #include <Adafruit_ADS1015.h>
 
+#include <WEMOS_SHT3X.h>
+
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
 // #include <ESP8266HTTPUpdateServer.h>
@@ -17,21 +19,25 @@
 WiFiClient client;
 
 ESP8266WebServer server(80);
-//ESP8266HTTPUpdateServer httpUpdater;
 BootstrapWebSite ws("en");
 
 #ifdef AIO_KEY
 Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO_KEY);
 Adafruit_MQTT_Publish presence(&mqtt, AIO_USERNAME "/feeds/presence");
 Adafruit_MQTT_Publish mq2(&mqtt, AIO_USERNAME "/feeds/mq2");
-Adafruit_MQTT_Publish mq8(&mqtt, AIO_USERNAME "/feeds/mq8");
+Adafruit_MQTT_Publish mq137(&mqtt, AIO_USERNAME "/feeds/mq137");
 Adafruit_MQTT_Publish mq4(&mqtt, AIO_USERNAME "/feeds/mq4");
 Adafruit_MQTT_Publish pir_feed(&mqtt, AIO_USERNAME "/feeds/pir");
+Adafruit_MQTT_Publish humidity_feed(&mqtt, AIO_USERNAME "/feeds/humidity");
+Adafruit_MQTT_Publish temp_feed(&mqtt, AIO_USERNAME "/feeds/temperature");
 
 void mqtt_connect(void);
 #endif
 
 Adafruit_ADS1015 adc;
+SHT3X sht30(0x45);
+
+ADC_MODE(ADC_VCC);
 
 unsigned long start_time;
 
@@ -79,13 +85,13 @@ void setup() {
   adc.begin();
   adc.setGain(GAIN_ONE);
 
-
   if (MDNS.begin(MDNS_NAME)) {
     Serial.println("MDNS responder started");
   }
 
   //  ws.addBranding(branding_image_base64, "image/jpeg");
 
+  ws.addPageToNav("😸💩", "/");
   ws.addPageToNav("Info", "/info");
   ws.addPageToNav("ESP", "/esp");
 
@@ -101,10 +107,11 @@ void setup() {
   ArduinoOTA.begin();
 }
 
-int16_t adc0, adc1, adc2, adc3, pir;
+int16_t adc0, adc1, adc2, adc3, pir, ftemp, ctemp, humidity;
 unsigned long next_sample_time = 0;
 
 void loop() {
+
 #ifdef AIO_KEY
   if(! mqtt.ping(3)) {
     // reconnect to adafruit io
@@ -112,6 +119,22 @@ void loop() {
       mqtt_connect();
   }
 #endif
+
+  if(sht30.get() == 0){
+    ftemp = sht30.fTemp;
+    ctemp = sht30.cTemp;
+    humidity = sht30.humidity;
+
+    Serial.print("Temperature in Celsius : ");
+    Serial.println(sht30.cTemp);
+    Serial.print("Temperature in Fahrenheit : ");
+    Serial.println(sht30.fTemp);
+    Serial.print("Relative Humidity : ");
+    Serial.println(sht30.humidity);
+    Serial.println();
+  } else {
+    Serial.println("Temperature/Humidity Error!");
+  }
 
   pir = digitalRead(PIR_PIN);
   Serial.printf("PIR is %d\n", pir);
@@ -123,10 +146,10 @@ void loop() {
   Serial.printf("ADC 1 [mq2 - methane] is %d\n", adc1);
 
   adc2 = adc.readADC_SingleEnded(2);
-  Serial.printf("ADC 2 [mq137 - ammonia] is %d\n", adc2);
+  Serial.printf("ADC 2 [mq4 - methane] is %d\n", adc2);
 
   adc3 = adc.readADC_SingleEnded(3);
-  Serial.printf("ADC 3 [mq4 - methane] is %d\n", adc3);
+  Serial.printf("ADC 3 [mq137 - ammonia] is %d\n", adc3);
 
   //  Serial.printf("SAMPLE DELAY %d, current time %ld\n", MQ2_SAMPLE_DELAY,  millis() - start_time);
 
@@ -137,15 +160,21 @@ void loop() {
 	Serial.println("publish 1 failed! :(");
 
     if(adc2 != -1)
-      if(!mq8.publish(adc2))
+      if(!mq4.publish(adc2))
 	Serial.println("publish 2 failed! :(");
 
     if(adc3 != -1)
-      if(!mq4.publish(adc3))
+      if(!mq137.publish(adc3))
 	Serial.println("publish 3 failed! :(");
 
     if(!pir_feed.publish(pir))
       Serial.println("publish pir failed! :(");
+
+    if(!temp_feed.publish(ftemp))
+      Serial.println("publish ftemp failed! :(");
+
+    if(!humidity_feed.publish(humidity))
+      Serial.println("publish humidity failed! :(");
 
     next_sample_time = millis() + AIO_SAMPLE_DELAY;
   }
@@ -186,7 +215,7 @@ void mqtt_connect(void) {
 void handleIndex() {
   BootstrapWebPage page(&ws);
 
-  page.addHeading("Cat Poop Sensor XX!");
+  page.addHeading("Cat Poop Sensor!");
   page.addList(String("Presence ") + pir,
 	       String("Methane/Butane/LPG/Smoke ") + adc1,
 	       String("Methane/CNG ") + adc2,
