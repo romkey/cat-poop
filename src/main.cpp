@@ -16,6 +16,11 @@
 
 #include "config.h"
 
+extern "C" {
+  #include "user_interface.h"
+};
+
+
 #ifdef IFTTT_KEY
 #include <IFTTTWebhook.h>
 #endif
@@ -100,6 +105,10 @@ void setup() {
 
 #ifdef IFTTT_KEY
   ifttt.trigger("boot");
+
+  String reason = ESP.getResetReason();
+  reason.replace(' ', '+');
+  ifttt.trigger("boot", reason.c_str());
 #endif
 
   ws.addPageToNav("😸💩", "/");
@@ -112,7 +121,6 @@ void setup() {
 
   server.onNotFound(handleNotFound);
 
-  //  httpUpdater.setup(&server);
   server.begin();
 
   ArduinoOTA.begin();
@@ -187,7 +195,7 @@ void loop() {
     if(!humidity_feed.publish(humidity))
       Serial.println("publish humidity failed! :(");
 
-    next_sample_time = millis() + AIO_SAMPLE_DELAY;
+    next_sample_time += AIO_SAMPLE_DELAY;
   }
 #endif
 
@@ -256,6 +264,9 @@ void handleInfo() {
 void handleESP() {
   BootstrapWebPage page(&ws);
 
+  struct rst_info* rest_info = system_get_rst_info();
+
+
   page.addHeading(String("ESP"), 1);
   page.addList(String("VCC ") + ESP.getVcc(),
                String("Free heap ") + ESP.getFreeHeap(),
@@ -264,7 +275,8 @@ void handleESP() {
                String("Flash chip size ") + ESP.getFlashChipSize(),
                String("Flash chip speed ") + ESP.getFlashChipSpeed(),
                String("Sketch Size ") + ESP.getSketchSize(),
-               String("Free Sketch Space ") + ESP.getFreeSketchSpace());
+               String("Free Sketch Space ") + ESP.getFreeSketchSpace(),
+	       String("Reset reason ") + ESP.getResetReason());
 
   server.send(200, "text/html", page.getHTML());
 }
