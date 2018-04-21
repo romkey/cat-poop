@@ -90,6 +90,30 @@ void setup() {
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
 
+#ifdef IFTTT_KEY
+  ifttt.trigger("boot");
+
+  String reason = ESP.getResetReason();
+  reason.replace(' ', '+');
+
+  // from https://www.espressif.com/sites/default/files/documentation/esp8266_reset_causes_and_common_fatal_exception_causes_en.pdf
+  char buffer[500] = "";
+  struct rst_info* reset_info = system_get_rst_info();
+
+  // cause: 0 - invalid command
+  //        6 - division by zero
+  //        9 - unaligned read/write operation
+  //        28/29 - access to invalid address
+  
+  if(reset_info->reason == REASON_EXCEPTION_RST) {
+    snprintf(buffer, 500, "+cause+%d,+epc1+0x%08x,+epc2+0x%08x,+epc3+0x%08x,+excvaddr+0x%08x,+depc+0x%08x\n",
+	     reset_info->exccause, reset_info->epc1, reset_info->epc2, reset_info->epc3, reset_info->excvaddr, reset_info->depc);
+  }
+
+  ifttt.trigger("boot", reason.c_str(), buffer);
+#endif
+
+  
 #ifdef AIO_KEY
   Serial.println("MQTT");
   mqtt_connect();
@@ -102,14 +126,6 @@ void setup() {
   if (MDNS.begin(MDNS_NAME)) {
     Serial.println("MDNS responder started");
   }
-
-#ifdef IFTTT_KEY
-  ifttt.trigger("boot");
-
-  String reason = ESP.getResetReason();
-  reason.replace(' ', '+');
-  ifttt.trigger("boot", reason.c_str());
-#endif
 
   ws.addPageToNav("😸💩", "/");
   ws.addPageToNav("Info", "/info");
@@ -264,11 +280,18 @@ void handleInfo() {
 void handleESP() {
   BootstrapWebPage page(&ws);
 
-  struct rst_info* rest_info = system_get_rst_info();
+  // from https://www.espressif.com/sites/default/files/documentation/esp8266_reset_causes_and_common_fatal_exception_causes_en.pdf
+  char buffer[500] = "";
+  struct rst_info* reset_info = system_get_rst_info();
 
+  if(reset_info->reason == REASON_EXCEPTION_RST) {
+    snprintf(buffer, 500, " cause %d, epc1=0x%08x, epc2=0x%08x, epc3=0x%08x, excvaddr=0x%08x, depc=0x%08x\n",
+	     reset_info->exccause, reset_info->epc1, reset_info->epc2, reset_info->epc3, reset_info->excvaddr, reset_info->depc);
+  }
 
   page.addHeading(String("ESP"), 1);
-  page.addList(String("VCC ") + ESP.getVcc(),
+  page.addList(String("SDK ") + ESP.getSdkVersion() + String(", Core ") + ESP.getCoreVersion(),
+	       String("VCC ") + ESP.getVcc(),
                String("Free heap ") + ESP.getFreeHeap(),
                String("Chip ID ") + ESP.getChipId() ,
                String("Flash chip ID ") + ESP.getFlashChipId(),
@@ -276,7 +299,7 @@ void handleESP() {
                String("Flash chip speed ") + ESP.getFlashChipSpeed(),
                String("Sketch Size ") + ESP.getSketchSize(),
                String("Free Sketch Space ") + ESP.getFreeSketchSpace(),
-	       String("Reset reason ") + ESP.getResetReason());
+	       String("Reset reason ") + ESP.getResetReason() + buffer);
 
   server.send(200, "text/html", page.getHTML());
 }
