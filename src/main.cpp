@@ -74,6 +74,7 @@ void setup() {
   Serial.println();
   Serial.println();
 
+  WiFi.persistent(0);
   WiFi.mode(WIFI_STA);
   WiFi.begin(WLAN_SSID, WLAN_PASS);
 
