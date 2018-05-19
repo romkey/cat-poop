@@ -5,9 +5,9 @@
 
 #include <WEMOS_SHT3X.h>
 
+#include <ESP8266WiFiMulti.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
-// #include <ESP8266HTTPUpdateServer.h>
 #include <ArduinoOTA.h>
 #include <ESP.h>
 
@@ -40,7 +40,6 @@ Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO
 Adafruit_MQTT_Publish presence(&mqtt, AIO_USERNAME "/feeds/presence");
 Adafruit_MQTT_Publish mq2(&mqtt, AIO_USERNAME "/feeds/mq2");
 Adafruit_MQTT_Publish mq137(&mqtt, AIO_USERNAME "/feeds/mq137");
-Adafruit_MQTT_Publish mq4(&mqtt, AIO_USERNAME "/feeds/mq4");
 Adafruit_MQTT_Publish pir_feed(&mqtt, AIO_USERNAME "/feeds/pir");
 Adafruit_MQTT_Publish humidity_feed(&mqtt, AIO_USERNAME "/feeds/humidity");
 Adafruit_MQTT_Publish temp_feed(&mqtt, AIO_USERNAME "/feeds/temperature");
@@ -57,48 +56,58 @@ unsigned long start_time;
 
 void handleInfo(), handleIndex(), handleESP(), handleNotFound();
 
+ESP8266WiFiMulti wifiMulti;
+
 void setup() {
   start_time = millis();
 
   Wire.begin();
 
+  pinMode(LED_BUILTIN, OUTPUT);
   pinMode(PIR_PIN, INPUT);
+
+  digitalWrite(LED_BUILTIN, HIGH);
 
   Serial.begin(115200);
   Serial.println("cat poop monitor");
 
   Serial.println();
   delay(10);
-  Serial.print("Connecting to ");
-  Serial.println(WLAN_SSID);
+  Serial.println("Connecting to wifi");
+
+  Serial.print("mac address: ");
+  Serial.println(WiFi.macAddress());
   Serial.println();
   Serial.println();
 
   WiFi.persistent(0);
   WiFi.mode(WIFI_STA);
-  WiFi.begin(WLAN_SSID, WLAN_PASS);
+  wifiMulti.addAP(WLAN_SSID1, WLAN_PASS1);
+  wifiMulti.addAP(WLAN_SSID2, WLAN_PASS2);
+  wifiMulti.addAP(WLAN_SSID3, WLAN_PASS3);
 
-  Serial.print("mac address: ");
-  Serial.println(WiFi.macAddress());
-  
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
+  while (wifiMulti.run() != WL_CONNECTED) {
+    delay(2500);
     Serial.println("derp");
   }
   Serial.println();
 
-  Serial.println("WiFi connected");
-  Serial.println("IP address: ");
+  Serial.print("WiFi connected to ");
+  Serial.println(WiFi.SSID());
+  Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
+  digitalWrite(LED_BUILTIN, LOW);
+
 #ifdef IFTTT_KEY
-  ifttt.trigger("boot");
+  char buffer[500] = "";
+  WiFi.localIP().toString().toCharArray(buffer, 500);
+  ifttt.trigger("boot", buffer);
 
   String reason = ESP.getResetReason();
   reason.replace(' ', '+');
 
   // from https://www.espressif.com/sites/default/files/documentation/esp8266_reset_causes_and_common_fatal_exception_causes_en.pdf
-  char buffer[500] = "";
   struct rst_info* reset_info = system_get_rst_info();
 
   // cause: 0 - invalid command
@@ -181,9 +190,6 @@ void loop() {
   adc1 = adc.readADC_SingleEnded(1);
   Serial.printf("ADC 1 [mq2 - methane] is %d\n", adc1);
 
-  adc2 = adc.readADC_SingleEnded(2);
-  Serial.printf("ADC 2 [mq4 - methane] is %d\n", adc2);
-
   adc3 = adc.readADC_SingleEnded(3);
   Serial.printf("ADC 3 [mq137 - ammonia] is %d\n", adc3);
 
@@ -194,10 +200,6 @@ void loop() {
     if(adc1 != -1)
       if(!mq2.publish(adc1))
 	Serial.println("publish 1 failed! :(");
-
-    if(adc2 != -1)
-      if(!mq4.publish(adc2))
-	Serial.println("publish 2 failed! :(");
 
     if(adc3 != -1)
       if(!mq137.publish(adc3))
@@ -251,12 +253,17 @@ void mqtt_connect(void) {
 void handleIndex() {
   BootstrapWebPage page(&ws);
 
+  sht30.get();
+
   page.addHeading("Cat Poop Sensor!");
   page.addList(String("Presence ") + pir,
 	       String("Methane/Butane/LPG/Smoke ") + adc1,
 	       String("Methane/CNG ") + adc2,
 	       String("Ammonia ") + adc3,
-	       String("Voltage ") + adc0);
+	       String("Voltage ") + adc0,
+	       String("Temperature ") + sht30.fTemp,
+	       String("Humidity ") + sht30.humidity
+	       );
 
   server.send(200, "text/html", page.getHTML());
 }
